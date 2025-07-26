@@ -21,7 +21,8 @@ def init_db():
              phone TEXT,
              school TEXT,
              class TEXT,
-             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+             password_hash TEXT)''')
     conn.commit()
     return conn, cursor
 
@@ -31,23 +32,6 @@ conn, cursor = init_db()
 # Теперь можно инициализировать бота
 TOKEN = '7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w'
 bot = telebot.TeleBot(TOKEN)
-
-
-# Подключение к базе данных
-conn = sqlite3.connect('users.db', check_same_thread=False)
-cursor = conn.cursor()
-
-# Создание таблицы пользователей
-cursor.execute('''CREATE TABLE IF NOT EXISTS users
-             (id INTEGER PRIMARY KEY AUTOINCREMENT,
-             user_id INTEGER UNIQUE,
-             first_name TEXT,
-             last_name TEXT,
-             phone TEXT,
-             school TEXT,
-             class TEXT,
-             register_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-conn.commit()
 
 def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -208,7 +192,6 @@ def process_school(message, last_name, first_name, middle_name, phone):
     markup.add(types.KeyboardButton('Отмена'))
     msg = bot.send_message(message.chat.id, "Выберите ваш класс:", reply_markup=markup)
     bot.register_next_step_handler(msg, lambda m: process_class(m, last_name, first_name, middle_name, phone, school))
-
 
 def process_class(message, last_name, first_name, middle_name, phone, school):
     if message.text == 'Отмена':
@@ -393,11 +376,6 @@ def delete_profile(message):
 def back_to_menu(message):
     show_menu(message)
 
-# Запуск бота
-if __name__ == '__main__':
-    print("Бот запущен...")
-    bot.infinity_polling()
-
 @bot.message_handler(func=lambda m: m.text and not m.text.startswith('/'))
 def save_user_message(message):
     try:
@@ -408,3 +386,8 @@ def save_user_message(message):
         conn.close()
     except Exception as e:
         print(f'Ошибка при сохранении сообщения пользователя: {e}')
+
+# Запуск бота
+if __name__ == '__main__':
+    print("Бот запущен...")
+    bot.infinity_polling()
