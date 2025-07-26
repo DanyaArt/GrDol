@@ -179,7 +179,7 @@ def process_phone(message, last_name, first_name, middle_name):
     # Проверка уникальности телефона
     with sqlite3.connect('users.db', check_same_thread=False) as conn:
         cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM users WHERE phone = ?", (phone,))
+        cursor.execute("SELECT 1 FROM users WHERE phone = ?", (phone,))
         exists = cursor.fetchone()
     if exists:
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
