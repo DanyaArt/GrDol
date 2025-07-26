@@ -322,7 +322,32 @@ def send_test_result_email():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+# --- TELEGRAM BOT LOGIC (из bot.py) ---
+from telebot.types import Update
+import json
+
+def hash_password(password):
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+# --- HANDLERS из bot.py ---
+# (Весь код обработчиков и функций из bot.py, кроме запуска polling)
+# ... (сюда будет вставлен код из bot.py, адаптированный под работу с get_db) ...
+
+# --- WEBHOOK ENDPOINT ---
+@app.route(f"/webhook/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
+def telegram_webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return 'ok', 200
+    return 'not allowed', 403
+
 if __name__ == '__main__':
     import os
     port = int(os.environ.get("PORT", 5000))
+    # Установить webhook при запуске
+    WEBHOOK_URL = f"https://grdol.onrender.com/webhook/{7709800436:AAG9zdInNqWmU-TW7IuzioHhy_McWnqLw0w}"
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL)
     app.run(host="0.0.0.0", port=port, debug=False)
