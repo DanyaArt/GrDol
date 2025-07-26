@@ -8,6 +8,10 @@ import hashlib
 def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
+def normalize_phone(phone):
+    """Нормализует номер телефона к единому формату"""
+    return phone.replace(' ', '').replace('-', '').replace('(', '').replace(')', '').lstrip('+')
+
 # Настройка подключения к базе данных
 def init_db():
     conn = sqlite3.connect('users.db', check_same_thread=False)
@@ -53,9 +57,10 @@ def start(message):
             if cursor.rowcount > 0:
                 updated = True
         if not updated and message.contact:
+            phone = normalize_phone(message.contact.phone_number)
             cursor.execute(
                 "UPDATE users SET user_id=? WHERE phone=? AND (user_id IS NULL OR user_id='')",
-                (message.from_user.id, message.contact.phone_number)
+                (message.from_user.id, phone)
             )
             if cursor.rowcount > 0:
                 updated = True
@@ -82,10 +87,11 @@ def process_start_choice(message):
 def process_login_phone(message):
     if message.text == 'Отмена':
         return start(message)
+    phone = normalize_phone(message.text.strip())
     with sqlite3.connect('users.db', check_same_thread=False) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE phone = ?", (message.text.strip(),))
+        cursor.execute("SELECT * FROM users WHERE phone = ?", (phone,))
     user = cursor.fetchone()
     if user:
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -160,6 +166,8 @@ def process_phone(message, last_name, first_name, middle_name):
         phone = message.contact.phone_number
     else:
         phone = message.text
+    # Нормализуем номер телефона
+    phone = normalize_phone(phone)
     # Проверка уникальности телефона
     with sqlite3.connect('users.db', check_same_thread=False) as conn:
         cursor = conn.cursor()
