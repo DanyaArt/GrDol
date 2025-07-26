@@ -45,33 +45,52 @@ def get_main_menu():
 # Команда /start
 @bot.message_handler(commands=['start'])
 def start(message):
-    updated = False
+    # Проверяем, зарегистрирован ли пользователь
     with sqlite3.connect('users.db', check_same_thread=False) as conn:
         cursor = conn.cursor()
-        if message.from_user.username:
-            username = message.from_user.username.lstrip('@')
-            cursor.execute(
-                "UPDATE users SET user_id=? WHERE tg=? AND (user_id IS NULL OR user_id='')",
-                (message.from_user.id, username)
-            )
-            if cursor.rowcount > 0:
-                updated = True
-        if not updated and message.contact:
-            phone = normalize_phone(message.contact.phone_number)
-            cursor.execute(
-                "UPDATE users SET user_id=? WHERE phone=? AND (user_id IS NULL OR user_id='')",
-                (message.from_user.id, phone)
-            )
-            if cursor.rowcount > 0:
-                updated = True
-        conn.commit()
-    print(f"[DEBUG] user_id update on /start: username={message.from_user.username}, id={message.from_user.id}, updated={updated}")
-    msg = bot.send_message(
-        message.chat.id,
-        "Выберите действие:",
-        reply_markup=get_main_menu()
-    )
-    bot.register_next_step_handler(msg, process_start_choice)
+        cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (message.from_user.id,))
+        user_exists = cursor.fetchone()
+        
+        if not user_exists:
+            # Пытаемся обновить user_id для существующих пользователей
+            updated = False
+            if message.from_user.username:
+                username = message.from_user.username.lstrip('@')
+                cursor.execute(
+                    "UPDATE users SET user_id=? WHERE tg=? AND (user_id IS NULL OR user_id='')",
+                    (message.from_user.id, username)
+                )
+                if cursor.rowcount > 0:
+                    updated = True
+            if not updated and message.contact:
+                phone = normalize_phone(message.contact.phone_number)
+                cursor.execute(
+                    "UPDATE users SET user_id=? WHERE phone=? AND (user_id IS NULL OR user_id='')",
+                    (message.from_user.id, phone)
+                )
+                if cursor.rowcount > 0:
+                    updated = True
+            conn.commit()
+            
+            # Если пользователь не найден, показываем меню регистрации/входа
+            if not updated:
+                msg = bot.send_message(
+                    message.chat.id,
+                    "Выберите действие:",
+                    reply_markup=get_main_menu()
+                )
+                bot.register_next_step_handler(msg, process_start_choice)
+                return
+            else:
+                # Пользователь найден и user_id обновлен
+                bot.send_message(message.chat.id, "✅ Ваш аккаунт успешно привязан!")
+                show_menu(message)
+                return
+        else:
+            # Пользователь уже зарегистрирован
+            bot.send_message(message.chat.id, "С возвращением!")
+            show_menu(message)
+            return
 
 def process_start_choice(message):
     choice = message.text.strip().lower()
@@ -123,6 +142,17 @@ def process_login_password_by_phone(message, user):
 
 # Процесс регистрации
 def start_registration(message):
+    # Проверяем, не зарегистрирован ли уже пользователь
+    with sqlite3.connect('users.db', check_same_thread=False) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (message.from_user.id,))
+        exists = cursor.fetchone()
+    
+    if exists:
+        bot.send_message(message.chat.id, "Вы уже зарегистрированы! Используйте кнопку 'Войти' для входа в аккаунт.")
+        show_menu(message)
+        return
+    
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton('Отмена'))
     msg = bot.send_message(message.chat.id, "Давайте зарегистрируемся. Введите вашу фамилию:", reply_markup=markup)
@@ -242,14 +272,23 @@ def process_password2(message, last_name, first_name, middle_name, phone, school
         print('Попытка вставки пользователя в БД...')
         with sqlite3.connect('users.db', check_same_thread=False) as conn:
             cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO users (user_id, first_name, last_name, middle_name, phone, school, class, register_date, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)",
-            (message.from_user.id, first_name, last_name, middle_name, phone, school, class_num, password_hash)
-        )
-        conn.commit()
-        print('Пользователь успешно добавлен!')
-        bot.send_message(message.chat.id, "✅ Регистрация завершена!", reply_markup=types.ReplyKeyboardRemove())
-        show_menu(message)
+            # Проверяем, не существует ли уже пользователь с таким user_id
+            cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (message.from_user.id,))
+            exists = cursor.fetchone()
+            
+            if exists:
+                bot.send_message(message.chat.id, "Вы уже зарегистрированы! Используйте кнопку 'Войти' для входа в аккаунт.")
+                show_menu(message)
+                return
+            
+            cursor.execute(
+                "INSERT INTO users (user_id, first_name, last_name, middle_name, phone, school, class, register_date, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)",
+                (message.from_user.id, first_name, last_name, middle_name, phone, school, class_num, password_hash)
+            )
+            conn.commit()
+            print('Пользователь успешно добавлен!')
+            bot.send_message(message.chat.id, "✅ Регистрация завершена!", reply_markup=types.ReplyKeyboardRemove())
+            show_menu(message)
     except Exception as e:
         import traceback
         print('Ошибка при регистрации:', traceback.format_exc())
